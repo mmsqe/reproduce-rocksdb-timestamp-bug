@@ -58,13 +58,27 @@ func main() {
 	itr := db.NewIteratorCF(newTSReadOptions(&version), cfHandle)
 	itr.SeekToFirst()
 	counter := 0
+
+	readOpts := grocksdb.NewDefaultReadOptions()
+	var ts [tsrocksdb.TimestampSize]byte
+	binary.LittleEndian.PutUint64(ts[:], uint64(version))
+	readOpts.SetTimestamp(ts[:])
+	defer readOpts.Destroy()
+
 	for ; itr.Valid(); itr.Next() {
 		key := moveSliceToBytes(itr.Key())
 		value := moveSliceToBytes(itr.Value())
+		ts := binary.LittleEndian.Uint64(itr.Timestamp().Data())
 
-		if binary.LittleEndian.Uint64(itr.Timestamp().Data()) == 0 {
+		if ts == 0 {
 			// skip 0 timestamp
 			continue
+		} else {
+			v, t, err := db.GetCFWithTS(readOpts, cfHandle, key)
+			fmt.Println("mm-get", string(key), string(v.Data()), ts, binary.LittleEndian.Uint64(t.Data()))
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		if string(key) != fmt.Sprintf("key-%010d", counter) {
